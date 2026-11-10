@@ -1,0 +1,88 @@
+// Run from the project root against the simulation server on port 8782.
+async page => {
+  const assert=(value,message)=>{if(!value)throw new Error(message);};
+  const errors=[];page.on('pageerror',error=>errors.push(error.message));
+  const state=async()=>(await page.request.get('http://127.0.0.1:8782/api/state')).json();
+  const wait=async(predicate,message)=>{
+    const end=Date.now()+12000;
+    while(Date.now()<end){const s=await state();if(predicate(s))return s;await page.waitForTimeout(150);}
+    throw new Error(message+': '+JSON.stringify((await state()).t));
+  };
+  const initial=await state();
+  assert(initial.simulation&&!initial.connected,'requires disconnected simulation backend');
+  const setup=await page.request.post('http://127.0.0.1:8782/api/command',{data:{action:'apply',config:{...initial.config,k:0,speed_mode:0,dual_pump:0,thresholds:[],speeds:[]}},headers:{'X-Control-Token':initial.token}});
+  assert(setup.ok(),'simulation setup');
+  await page.reload();
+  await page.waitForFunction(()=>document.querySelector('#backendStatus').textContent==='后台在线');
+  await page.setViewportSize({width:1366,height:900});
+  await page.locator('#connectPump').click();
+  await wait(s=>s.channels.pump&&s.t.pump_valid,'pump connection');
+  assert(!(await state()).channels.adc,'pump must not open ADC');
+  await page.locator('#direction').selectOption('1');
+  await page.locator('#manualRpm').fill('50');
+  await page.locator('#manual').click();
+  await wait(s=>s.t.state==='MANUAL'&&s.t.rpm_x100===5000&&(s.t.status&2),'pump-only reverse run');
+  assert(await page.locator('#auto').isDisabled(),'automatic needs ADC');
+  await page.locator('#manualRpm').fill('75.5');
+  await page.locator('#manual').click();
+  await wait(s=>s.t.rpm_x100===7550,'live manual speed update');
+  await page.screenshot({path:'output/playwright/pc-pump-only.png',fullPage:true});
+  await page.locator('#connectAdc').click();
+  await wait(s=>s.channels.adc&&s.t.voltage_valid,'ADC connect while manual');
+  assert((await state()).t.state==='MANUAL','ADC connect must preserve manual run');
+  await page.locator('#disconnectAdc').click();
+  await wait(s=>!s.channels.adc,'ADC independent disconnect');
+  assert((await state()).t.state==='MANUAL','ADC disconnect must preserve manual run');
+  await page.locator('#stop').click();
+  await wait(s=>s.t.state==='IDLE','manual stop');
+  await page.waitForFunction(()=>document.querySelector('#state').textContent==='待机');
+  await page.locator('#direction').selectOption('0');
+  await page.locator('#connectPump2').click();
+  await wait(s=>s.t.pumps.pump2.valid&&s.t.pump_valid,'second pump for automatic control');
+  await page.locator('#connectAdc').click();
+  await wait(s=>s.t.voltage_valid,'ADC reconnect');
+  await page.locator('#t1').fill('1.3');
+  await page.locator('#t2').fill('1.56');
+  await page.locator('#r0').fill('100');
+  await page.locator('#r1').fill('60');
+  await page.locator('#r2').fill('30');
+  await page.locator('#saveRules').click();
+  await wait(s=>s.config.speed_mode===1&&s.config.thresholds[0]===1300&&s.t.saved,'save RPM rules');
+  assert((await state()).config.k===0,'automatic RPM does not need calibration');
+  await page.locator('#auto').click();
+  await wait(s=>s.t.state==='RUN'&&s.t.rpm_x100===10000,'automatic direct RPM');
+  await page.locator('#simulationPanel').evaluate(element=>element.open=true);
+  await page.locator('#simValue').fill('1400');await page.locator('#simApply').click();
+  await wait(s=>s.t.stage===1&&s.t.rpm_x100===6000,'middle stage');
+  await page.locator('#simValue').fill('1650');await page.locator('#simApply').click();
+  await wait(s=>s.t.stage===2&&s.t.rpm_x100===3000,'high stage');
+  await page.locator('#disconnectAdc').click();
+  await wait(s=>s.t.state==='HOLD'&&!s.channels.adc,'ADC loss hold');
+  assert((await state()).t.rpm_x100===3000,'hold last RPM');
+  await page.locator('#connectAdc').click();
+  await wait(s=>s.t.voltage_valid&&s.t.state==='HOLD','reconnect does not auto resume');
+  await page.locator('#resume').click();
+  await wait(s=>s.t.state==='RUN','manual resume');
+  await page.locator('#simulationPanel').evaluate(element=>element.open=false);
+  await page.screenshot({path:'output/playwright/pc-desktop.png',fullPage:true});
+  await page.setViewportSize({width:390,height:844});
+  await page.waitForTimeout(500);
+  assert(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth),'mobile overflow');
+  const overlaps=await page.evaluate(()=>[...document.querySelectorAll('button,input,select')].filter(e=>e.getClientRects().length).some(e=>e.scrollWidth>e.clientWidth+2));
+  assert(!overlaps,'control text overflow');
+  await page.screenshot({path:'output/playwright/pc-mobile.png',fullPage:true});
+  await page.reload();
+  await page.waitForFunction(()=>document.querySelector('#state').textContent==='电压联动中');
+  assert((await state()).t.state==='RUN','browser reload must preserve backend run');
+  await page.locator('#stop').click();await wait(s=>s.t.state==='IDLE','auto stop');
+  await page.locator('#disconnectPump2').click();
+  await wait(s=>!s.channels.pump2,'second pump disconnected');
+  await page.locator('#disconnectPump').click();await wait(s=>!s.channels.pump&&s.t.voltage_valid,'ADC-only reading');
+  await page.locator('#disconnectAdc').click();await wait(s=>!s.connected,'all disconnected');
+  assert(errors.length===0,'page errors: '+errors.join(','));
+  const report={result:'PASS',checks:['pump-only start/stop/direction','live manual speed',
+    'independent ADC connect/disconnect','no calibration needed','editable voltage/RPM stages',
+    'ADC HOLD/manual resume','ADC-only reading','reload preserves run','desktop/mobile'],errors};
+  await page.evaluate(value=>{document.documentElement.dataset.pcTestResult=JSON.stringify(value);},report);
+  return report;
+}

@@ -1,0 +1,35 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<link rel="icon" href="data:,"><link rel="stylesheet" href="pc-control.css">
+<title>水泵控制</title>
+</head>
+<body>
+<header><h1>水泵控制</h1><span id="backendStatus" role="status">连接后台中</span><button id="scan">刷新串口</button></header>
+<main>
+<div id="simulationBanner" class="simulation" hidden>模拟设备 · 未连接真实硬件</div>
+<div id="notice" role="status" aria-live="polite" hidden></div>
+<section aria-label="设备连接" class="connections dual">
+<div><h2><span id="pumpTitle" class="device-title">正极泵</span> <span id="pumpStatus" class="muted">未连接</span></h2>
+<div class="connection-fields"><label>串口<select id="pump_port"><option value="">请选择</option></select></label><label>波特率<select id="baud"></select></label><label>地址<input id="pump" type="number" min="1" max="247" value="1"></label></div>
+<div class="actions"><button id="connectPump">连接正极泵</button><button id="disconnectPump" disabled>断开</button></div></div>
+<div id="pump2Panel"><h2>负极泵 <span id="pump2Status" class="muted">未连接</span></h2>
+<div class="connection-fields"><label>串口<select id="pump2_port"><option value="">请选择</option></select></label><label>波特率<select id="pump2_baud"></select></label><label>地址<input id="pump2" type="number" min="1" max="247" value="1"></label></div>
+<div class="actions"><button id="connectPump2">连接负极泵</button><button id="disconnectPump2" disabled>断开</button></div></div>
+<div><h2>电压采集（BZY） <span id="adcStatus" class="muted">未连接</span></h2>
+<div class="connection-fields"><label>串口<select id="adc_port"><option value="">请选择</option></select></label><label>波特率<select id="adc_baud"></select></label><label>地址<input id="adc" type="number" min="1" max="247" value="1"></label></div>
+<div class="actions"><button id="connectAdc">连接采集</button><button id="disconnectAdc" disabled>断开</button></div></div>
+</section>
+<dl class="readings dual"><div><dt>采集电压</dt><dd id="voltage">—</dd></div><div><dt id="rpmTitle">正极泵已应答转速</dt><dd id="rpm">—</dd></div><div id="rpm2Panel"><dt>负极泵已应答转速</dt><dd id="rpm2">—</dd></div><div><dt>运行状态</dt><dd id="state">未连接水泵</dd></div></dl>
+<section aria-labelledby="manualTitle"><h2 id="manualTitle">手动控制</h2>
+<div class="manual-fields"><label>转速 rpm<input id="manualRpm" type="number" min="0.1" max="350" step="0.01" value="50"></label><label><span id="directionTitle">正极泵方向</span><select id="direction"><option value="0">正转（顺时针）</option><option value="1">反转（逆时针）</option></select></label><label id="direction2Panel">负极泵方向<select id="direction2"><option value="0">正转（顺时针）</option><option value="1">反转（逆时针）</option></select></label></div>
+<div class="actions"><button id="manual" class="primary" disabled>启动水泵</button><button id="stop" class="danger" disabled>停止水泵</button><button id="reset" disabled>清除故障</button></div></section>
+<section aria-labelledby="autoTitle"><div class="section-title"><h2 id="autoTitle">电压联动</h2><span id="ruleStatus" class="muted">规则未保存</span></div>
+<form id="rules"><table><thead><tr><th>电压区间</th><th>阈值 V</th><th>转速 rpm</th><th class="remove-column"></th></tr></thead><tbody id="ruleRows"></tbody></table>
+<div class="actions rule-tools"><button id="addThreshold" type="button">添加阈值</button><span id="thresholdCount" class="muted"></span></div>
+<details><summary>采集设置</summary><div class="manual-fields"><label>输入量程上限 V<input id="full_mv" type="number" min="0.001" max="100" step="0.001" required></label><label>原始读数满量程<input id="raw_full" type="number" min="1" max="65535" step="1" required></label></div></details>
+<div class="actions"><button id="saveRules" type="submit">保存规则</button><button id="auto" type="button" class="primary" disabled>启动电压联动</button><button id="resume" type="button" disabled>恢复联动</button></div></form></section>
+<details id="simulationPanel" hidden><summary>模拟输入</summary><label>电压 mV<input id="simValue" type="number" value="1200" min="0" max="10000" step="1"></label><label class="check"><input id="simAdc" type="checkbox" checked>BZY在线</label><label class="check"><input id="simPump" type="checkbox" checked>正极泵在线</label><label id="simPump2Panel" class="check"><input id="simPump2" type="checkbox" checked>负极泵在线</label><button id="simApply">更新模拟输入</button></details>
+</main><script src="pc-control.js"></script>
+</body></html>
